@@ -1,438 +1,362 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, Cell 
-} from 'recharts';
-import { 
-  Plus, History, BarChart3, Download, User, Trash2, 
-  Calendar, Activity, AlertCircle 
-} from 'lucide-react';
-
-// --- Constants ---
-const CATEGORIES = [
-  { id: 1, label: "Before breakfast", type: "fasting" },
-  { id: 2, label: "2hrs after breakfast", type: "postprandial" },
-  { id: 3, label: "Before Lunch", type: "postprandial" },
-  { id: 4, label: "2hrs after Lunch", type: "postprandial" },
-  { id: 5, label: "Before Dinner", type: "postprandial" },
-  { id: 6, label: "2hrs after Dinner", type: "postprandial" }
-];
-
-const RANGES = {
-  fasting: { min: 3.3, max: 5.5 },
-  postprandial: { min: 3.3, max: 10.9 }
-};
-
-const App = () => {
-  // --- State ---
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('bgm_user');
-    return saved ? JSON.parse(saved) : { name: '', hcNumber: '' };
-  });
-
-  const [logs, setLogs] = useState(() => {
-    const saved = localStorage.getItem('bgm_logs');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [activeTab, setActiveTab] = useState('add');
-  const [formData, setFormData] = useState({
-    date: new Date().toISOString().split('T')[0],
-    categoryId: 1,
-    value: ''
-  });
-
-  // Load external scripts for PDF generation
-  useEffect(() => {
-    const script1 = document.createElement('script');
-    script1.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-    document.body.appendChild(script1);
-
-    const script2 = document.createElement('script');
-    script2.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js';
-    document.body.appendChild(script2);
-
-    return () => {
-      if (document.body.contains(script1)) document.body.removeChild(script1);
-      if (document.body.contains(script2)) document.body.removeChild(script2);
-    };
-  }, []);
-
-  // --- Persistence ---
-  useEffect(() => {
-    localStorage.setItem('bgm_user', JSON.stringify(user));
-  }, [user]);
-
-  useEffect(() => {
-    localStorage.setItem('bgm_logs', JSON.stringify(logs));
-  }, [logs]);
-
-  // --- Logic ---
-  const getStatus = (value, categoryId) => {
-    const val = parseFloat(value);
-    const category = CATEGORIES.find(c => c.id === parseInt(categoryId));
-    const range = RANGES[category.type];
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Blood Glucose Monitoring</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
     
-    if (val < range.min) return 'low';
-    if (val > range.max) return 'high';
-    return 'normal';
-  };
-
-  const handleAddLog = (e) => {
-    e.preventDefault();
-    if (!formData.value || !user.name) return;
-
-    const newLog = {
-      id: Date.now(),
-      ...formData,
-      value: parseFloat(formData.value),
-      status: getStatus(formData.value, formData.categoryId)
-    };
-
-    setLogs([newLog, ...logs]);
-    setFormData({ ...formData, value: '' });
-    setActiveTab('history');
-  };
-
-  const deleteLog = (id) => {
-    setLogs(logs.filter(log => log.id !== id));
-  };
-
-  // --- Statistics Logic ---
-  const statsData = useMemo(() => {
-    const sorted = [...logs].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const dailyTrends = sorted.reduce((acc, log) => {
-      const date = log.date;
-      if (!acc[date]) acc[date] = { date, value: 0, count: 0 };
-      acc[date].value += log.value;
-      acc[date].count += 1;
-      return acc;
-    }, {});
-
-    return Object.values(dailyTrends).map(d => ({
-      date: d.date,
-      avg: (d.value / d.count).toFixed(1)
-    })).slice(-10);
-  }, [logs]);
-
-  // --- PDF Export ---
-  const generatePDF = () => {
-    if (!window.jspdf) return;
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    <!-- React & Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
     
-    doc.setFontSize(20);
-    doc.text('Blood Glucose Monitoring Report', 14, 20);
-    doc.setFontSize(12);
-    doc.text(`Patient Name: ${user.name}`, 14, 30);
-    doc.text(`HC Number: ${user.hcNumber}`, 14, 37);
+    <!-- Babel & Icons -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@0.321.0/dist/umd/lucide.min.js"></script>
+    
+    <!-- PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .lucide-icon { display: inline-block; vertical-align: middle; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
 
-    const tableData = logs.map(log => [
-      log.date,
-      CATEGORIES.find(c => c.id === parseInt(log.categoryId))?.label,
-      `${log.value} mmol/L`,
-      log.status.toUpperCase()
-    ]);
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+        const { 
+            LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+        } = window.Recharts;
 
-    doc.autoTable({
-      startY: 50,
-      head: [['Date', 'Category', 'Value', 'Status']],
-      body: tableData,
-      headStyles: { fillColor: [79, 70, 229] },
-    });
+        // Revised Icon component to use lucide.createIcons which is safer in UMD
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const iconRef = useRef(null);
 
-    doc.save(`${user.name}_report.pdf`);
-  };
+            useEffect(() => {
+                if (window.lucide && iconRef.current) {
+                    window.lucide.createIcons({
+                        attrs: {
+                            class: `lucide-icon ${className}`,
+                            width: size,
+                            height: size,
+                            'stroke-width': 2.5
+                        },
+                        nameAttr: 'data-lucide'
+                    });
+                }
+            }, [name, size, className]);
 
-  const StatusBadge = ({ status }) => {
-    const colors = {
-      normal: 'bg-green-100 text-green-700',
-      high: 'bg-red-100 text-red-700',
-      low: 'bg-yellow-100 text-yellow-700'
-    };
-    return (
-      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${colors[status]}`}>
-        {status}
-      </span>
-    );
-  };
+            return (
+                <i 
+                    ref={iconRef} 
+                    data-lucide={name.toLowerCase()} 
+                    style={{ width: size, height: size, display: 'inline-block' }}
+                ></i>
+            );
+        };
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-16 md:pb-0 md:pl-64">
-      {/* Sidebar - Desktop */}
-      <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 hidden md:flex flex-col p-4 z-20">
-        <div className="flex items-center gap-2 mb-8 text-indigo-600 px-2">
-          <Activity size={28} strokeWidth={2.5} />
-          <h1 className="font-bold text-lg leading-tight">Glucose Tracker</h1>
-        </div>
-        
-        <nav className="space-y-1 flex-1">
-          <button onClick={() => setActiveTab('add')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${activeTab === 'add' ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Plus size={18} /> Add Entry
-          </button>
-          <button onClick={() => setActiveTab('history')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${activeTab === 'history' ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <History size={18} /> History
-          </button>
-          <button onClick={() => setActiveTab('stats')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${activeTab === 'stats' ? 'bg-indigo-600 text-white font-medium shadow-md shadow-indigo-100' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <BarChart3 size={18} /> Statistics
-          </button>
-        </nav>
+        const CATEGORIES = [
+            { id: 1, label: "Before breakfast", type: "fasting" },
+            { id: 2, label: "2hrs after breakfast", type: "postprandial" },
+            { id: 3, label: "Before Lunch", type: "postprandial" },
+            { id: 4, label: "2hrs after Lunch", type: "postprandial" },
+            { id: 5, label: "Before Dinner", type: "postprandial" },
+            { id: 6, label: "2hrs after Dinner", type: "postprandial" }
+        ];
 
-        <div className="mt-auto pt-4 border-t border-slate-100">
-          <button onClick={() => setActiveTab('profile')} className="flex items-center gap-3 w-full px-2 py-2 hover:bg-slate-50 rounded-lg transition-colors">
-            <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
-              {user.name ? user.name[0].toUpperCase() : <User size={16}/>}
-            </div>
-            <div className="overflow-hidden text-left">
-              <p className="font-semibold text-xs truncate">{user.name || 'Set Profile'}</p>
-              <p className="text-[10px] text-slate-400 truncate">{user.hcNumber || 'No HC#'}</p>
-            </div>
-          </button>
-        </div>
-      </aside>
+        const RANGES = {
+            fasting: { min: 3.3, max: 5.5 },
+            postprandial: { min: 3.3, max: 10.9 }
+        };
 
-      {/* Mobile Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-1 md:hidden z-30 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
-        {[
-          { id: 'add', icon: Plus, label: 'Add' },
-          { id: 'history', icon: History, label: 'Logs' },
-          { id: 'stats', icon: BarChart3, label: 'Stats' },
-          { id: 'profile', icon: User, label: 'Profile' }
-        ].map(item => (
-          <button 
-            key={item.id}
-            onClick={() => setActiveTab(item.id)} 
-            className={`flex flex-col items-center py-2 px-4 rounded-xl transition-colors ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}
-          >
-            <item.icon size={22} />
-            <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
-          </button>
-        ))}
-      </nav>
+        function App() {
+            const [user, setUser] = useState(() => {
+                const saved = localStorage.getItem('bgm_user');
+                return saved ? JSON.parse(saved) : { name: '', hcNumber: '' };
+            });
 
-      {/* Header - Mobile */}
-      <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-10 md:hidden flex justify-between items-center">
-        <div className="flex items-center gap-2 text-indigo-600">
-          <Activity size={20} strokeWidth={2.5} />
-          <h1 className="font-bold text-sm">Glucose Tracker</h1>
-        </div>
-        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          {activeTab}
-        </div>
-      </header>
+            const [logs, setLogs] = useState(() => {
+                const saved = localStorage.getItem('bgm_logs');
+                return saved ? JSON.parse(saved) : [];
+            });
 
-      <main className="max-w-2xl mx-auto p-3 md:p-6">
-        {/* Profile View */}
-        {(activeTab === 'profile' || !user.name) && (
-          <section className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 animate-in fade-in duration-300">
-            <h2 className="text-base font-bold mb-3 flex items-center gap-2 text-slate-800">
-              <User size={18} className="text-indigo-600" /> Patient Profile
-            </h2>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Full Name</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2.5 text-sm rounded-lg border border-slate-200 focus:ring-1 focus:ring-indigo-500 outline-none"
-                  placeholder="Enter name"
-                  value={user.name}
-                  onChange={(e) => setUser({ ...user, name: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">HC Number</label>
-                <input 
-                  type="text" 
-                  className="w-full p-2.5 text-sm rounded-lg border border-slate-200 focus:ring-1 focus:ring-indigo-500 outline-none"
-                  placeholder="Enter HC#"
-                  value={user.hcNumber}
-                  onChange={(e) => setUser({ ...user, hcNumber: e.target.value })}
-                />
-              </div>
-              <button onClick={() => setActiveTab('add')} className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-sm shadow-md">
-                Save Profile
-              </button>
-            </div>
-          </section>
-        )}
+            const [activeTab, setActiveTab] = useState('add');
+            const [formData, setFormData] = useState({
+                date: new Date().toISOString().split('T')[0],
+                categoryId: 1,
+                value: ''
+            });
 
-        {/* Tab: Add Entry */}
-        {activeTab === 'add' && user.name && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-              <h2 className="text-base font-bold mb-4 text-slate-800">New Reading</h2>
-              <form onSubmit={handleAddLog} className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Date</label>
-                    <input 
-                      type="date"
-                      className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50"
-                      value={formData.date}
-                      onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Time Period</label>
-                    <select 
-                      className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50"
-                      value={formData.categoryId}
-                      onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    >
-                      {CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
-                    </select>
-                  </div>
+            useEffect(() => {
+                localStorage.setItem('bgm_user', JSON.stringify(user));
+            }, [user]);
+
+            useEffect(() => {
+                localStorage.setItem('bgm_logs', JSON.stringify(logs));
+            }, [logs]);
+
+            const getStatus = (value, categoryId) => {
+                const val = parseFloat(value);
+                const category = CATEGORIES.find(c => c.id === parseInt(categoryId));
+                const range = RANGES[category.type];
+                if (val < range.min) return 'low';
+                if (val > range.max) return 'high';
+                return 'normal';
+            };
+
+            const handleAddLog = (e) => {
+                e.preventDefault();
+                if (!formData.value || !user.name) return;
+                const newLog = {
+                    id: Date.now(),
+                    ...formData,
+                    value: parseFloat(formData.value),
+                    status: getStatus(formData.value, formData.categoryId)
+                };
+                setLogs([newLog, ...logs]);
+                setFormData({ ...formData, value: '' });
+                setActiveTab('history');
+            };
+
+            const generatePDF = () => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                doc.setFontSize(20);
+                doc.text('Blood Glucose Monitoring Report', 14, 20);
+                doc.setFontSize(12);
+                doc.text(`Patient: ${user.name}`, 14, 30);
+                doc.text(`HC#: ${user.hcNumber}`, 14, 37);
+
+                const tableData = logs.map(log => [
+                    log.date,
+                    CATEGORIES.find(c => c.id === parseInt(log.categoryId))?.label,
+                    `${log.value} mmol/L`,
+                    log.status.toUpperCase()
+                ]);
+
+                doc.autoTable({
+                    startY: 45,
+                    head: [['Date', 'Category', 'Value', 'Status']],
+                    body: tableData,
+                    headStyles: { fillColor: [79, 70, 229] },
+                });
+                doc.save(`${user.name}_report.pdf`);
+            };
+
+            const statsData = useMemo(() => {
+                const sorted = [...logs].sort((a, b) => new Date(a.date) - new Date(b.date));
+                const dailyTrends = sorted.reduce((acc, log) => {
+                    const date = log.date;
+                    if (!acc[date]) acc[date] = { date, value: 0, count: 0 };
+                    acc[date].value += log.value;
+                    acc[date].count += 1;
+                    return acc;
+                }, {});
+                return Object.values(dailyTrends).map(d => ({
+                    date: d.date,
+                    avg: (d.value / d.count).toFixed(1)
+                })).slice(-10);
+            }, [logs]);
+
+            const StatusBadge = ({ status }) => {
+                const colors = {
+                    normal: 'bg-green-100 text-green-700',
+                    high: 'bg-red-100 text-red-700',
+                    low: 'bg-yellow-100 text-yellow-700'
+                };
+                return (
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${colors[status]}`}>
+                        {status}
+                    </span>
+                );
+            };
+
+            return (
+                <div className="min-h-screen pb-16 md:pb-0 md:pl-64">
+                    {/* Sidebar Desktop */}
+                    <aside className="fixed left-0 top-0 bottom-0 w-64 bg-white border-r border-slate-200 hidden md:flex flex-col p-4 z-20">
+                        <div className="flex items-center gap-2 mb-8 text-indigo-600 px-2">
+                            <Icon name="Activity" size={28} />
+                            <h1 className="font-bold text-lg leading-tight">Glucose Tracker</h1>
+                        </div>
+                        <nav className="space-y-1 flex-1">
+                            {['add', 'history', 'stats'].map(tab => (
+                                <button 
+                                    key={tab}
+                                    onClick={() => setActiveTab(tab)} 
+                                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all capitalize ${activeTab === tab ? 'bg-indigo-600 text-white font-medium shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
+                                >
+                                    <Icon name={tab === 'add' ? 'Plus' : tab === 'history' ? 'History' : 'Bar-Chart-3'} size={18} />
+                                    <span className="ml-2">{tab === 'add' ? 'Add Entry' : tab}</span>
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="mt-auto pt-4 border-t border-slate-100">
+                            <button onClick={() => setActiveTab('profile')} className="flex items-center gap-3 w-full px-2 py-2 hover:bg-slate-50 rounded-lg">
+                                <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-sm">
+                                    {user.name ? user.name[0].toUpperCase() : <Icon name="User" size={16}/>}
+                                </div>
+                                <div className="overflow-hidden text-left">
+                                    <p className="font-semibold text-xs truncate">{user.name || 'Set Profile'}</p>
+                                    <p className="text-[10px] text-slate-400 truncate">{user.hcNumber || 'No HC#'}</p>
+                                </div>
+                            </button>
+                        </div>
+                    </aside>
+
+                    {/* Mobile Bottom Nav */}
+                    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-1 md:hidden z-30 shadow-lg">
+                        {[
+                            { id: 'add', icon: 'Plus', label: 'Add' },
+                            { id: 'history', icon: 'History', label: 'Logs' },
+                            { id: 'stats', icon: 'Bar-Chart-3', label: 'Stats' },
+                            { id: 'profile', icon: 'User', label: 'Profile' }
+                        ].map(item => (
+                            <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex flex-col items-center py-2 px-4 rounded-xl ${activeTab === item.id ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                <Icon name={item.icon} size={22} />
+                                <span className="text-[10px] mt-0.5 font-medium">{item.label}</span>
+                            </button>
+                        ))}
+                    </nav>
+
+                    <header className="bg-white border-b border-slate-200 px-4 py-3 sticky top-0 z-10 md:hidden flex justify-between items-center">
+                        <div className="flex items-center gap-2 text-indigo-600">
+                            <Icon name="Activity" size={20} />
+                            <h1 className="font-bold text-sm uppercase tracking-tight ml-2">Glucose Tracker</h1>
+                        </div>
+                        <div className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{activeTab}</div>
+                    </header>
+
+                    <main className="max-w-2xl mx-auto p-3 md:p-6 animate-fade-in">
+                        {(activeTab === 'profile' || !user.name) && (
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4">
+                                <h2 className="text-sm font-black text-slate-400 uppercase mb-4 tracking-wider">Patient Profile</h2>
+                                <div className="space-y-3">
+                                    <input type="text" className="w-full p-2.5 text-sm rounded-lg border border-slate-200 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Full Name" value={user.name} onChange={(e) => setUser({...user, name: e.target.value})} />
+                                    <input type="text" className="w-full p-2.5 text-sm rounded-lg border border-slate-200 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Health Card Number" value={user.hcNumber} onChange={(e) => setUser({...user, hcNumber: e.target.value})} />
+                                    <button onClick={() => setActiveTab('add')} className="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-bold text-sm">Save Profile</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'add' && user.name && (
+                            <div className="space-y-4">
+                                <div className="bg-white p-4 rounded-xl border border-slate-200">
+                                    <h2 className="text-base font-bold mb-4 text-slate-800">New Entry</h2>
+                                    <form onSubmit={handleAddLog} className="space-y-4">
+                                        <div className="grid gap-3">
+                                            <input type="date" className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50" value={formData.date} onChange={(e) => setFormData({...formData, date: e.target.value})} />
+                                            <select className="w-full p-2.5 text-sm rounded-lg border border-slate-200 bg-slate-50" value={formData.categoryId} onChange={(e) => setFormData({...formData, categoryId: e.target.value})}>
+                                                {CATEGORIES.map(cat => <option key={cat.id} value={cat.id}>{cat.label}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">mmol/L</label>
+                                            <input type="number" step="0.1" placeholder="0.0" className="w-full p-4 text-3xl font-black rounded-xl border-2 border-slate-100 text-center outline-none focus:border-indigo-500" value={formData.value} onChange={(e) => setFormData({...formData, value: e.target.value})} required />
+                                        </div>
+                                        <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold text-sm shadow-lg active:scale-95 transition-transform">Record Reading</button>
+                                    </form>
+                                </div>
+                                <div className="bg-slate-800 text-white p-3 rounded-xl flex justify-around text-[10px] font-bold text-center">
+                                    <div><p className="text-slate-400">FASTING</p><p>3.3 - 5.5</p></div>
+                                    <div className="w-px bg-slate-700"></div>
+                                    <div><p className="text-slate-400">OTHERS</p><p>Up to 10.9</p></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'history' && (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center px-1">
+                                    <h2 className="text-base font-bold text-slate-800">Records</h2>
+                                    <button onClick={generatePDF} disabled={logs.length === 0} className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg">Export PDF</button>
+                                </div>
+                                {logs.length === 0 ? (
+                                    <p className="text-center py-12 text-slate-400 text-xs italic">No readings recorded yet.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {logs.map(log => (
+                                            <div key={log.id} className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-sm">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm ${log.status === 'normal' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                                                        {log.value}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-xs text-slate-800">{CATEGORIES.find(c => c.id == log.categoryId)?.label}</p>
+                                                        <p className="text-[10px] text-slate-400">{new Date(log.date).toLocaleDateString(undefined, {month:'short', day:'numeric'})}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <StatusBadge status={log.status} />
+                                                    <button onClick={() => setLogs(logs.filter(l => l.id !== log.id))} className="p-1.5 text-slate-200 hover:text-red-500">
+                                                        <Icon name="Trash-2" size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'stats' && (
+                            <div className="space-y-4">
+                                <h2 className="text-base font-bold text-slate-800">Analytics</h2>
+                                {logs.length < 3 ? (
+                                    <div className="bg-white p-6 rounded-xl border border-slate-200 text-center text-xs text-slate-400">Need 3+ logs for data visualization.</div>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="bg-white p-2 rounded-xl text-center border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase">AVG</p>
+                                                <p className="text-lg font-black text-indigo-600">{(logs.reduce((s,l)=>s+l.value,0)/logs.length).toFixed(1)}</p>
+                                            </div>
+                                            <div className="bg-white p-2 rounded-xl text-center border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase">NORM</p>
+                                                <p className="text-lg font-black text-green-600">{Math.round((logs.filter(l=>l.status==='normal').length/logs.length)*100)}%</p>
+                                            </div>
+                                            <div className="bg-white p-2 rounded-xl text-center border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase">COUNT</p>
+                                                <p className="text-lg font-black text-slate-800">{logs.length}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-xl border border-slate-100 h-56">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase mb-4">Trend (10 days)</p>
+                                            <div className="h-40 w-full">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <LineChart data={statsData}>
+                                                        <XAxis dataKey="date" hide />
+                                                        <YAxis hide domain={['auto', 'auto']} />
+                                                        <Tooltip contentStyle={{fontSize:'10px', borderRadius:'8px'}} />
+                                                        <Line type="monotone" dataKey="avg" stroke="#4f46e5" strokeWidth={3} dot={{r:3}} />
+                                                    </LineChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                    </main>
                 </div>
+            );
+        }
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Value (mmol/L)</label>
-                  <input 
-                    type="number"
-                    step="0.1"
-                    placeholder="0.0"
-                    className="w-full p-4 text-3xl font-black rounded-xl border-2 border-slate-100 focus:border-indigo-500 outline-none text-center"
-                    value={formData.value}
-                    onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold text-sm shadow-lg active:scale-[0.98] transition-transform">
-                  Record Measurement
-                </button>
-              </form>
-            </div>
-
-            <div className="bg-slate-800 text-white p-3 rounded-xl flex justify-around text-center">
-              <div>
-                <p className="text-[9px] uppercase font-bold text-slate-400">Fasting Target</p>
-                <p className="text-xs font-bold">3.3 - 5.5</p>
-              </div>
-              <div className="w-px bg-slate-700"></div>
-              <div>
-                <p className="text-[9px] uppercase font-bold text-slate-400">Others Target</p>
-                <p className="text-xs font-bold">Up to 10.9</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Tab: History */}
-        {activeTab === 'history' && (
-          <div className="space-y-3 animate-in fade-in">
-            <div className="flex justify-between items-center mb-1">
-              <h2 className="text-base font-bold text-slate-800">History</h2>
-              <button 
-                onClick={generatePDF}
-                disabled={logs.length === 0}
-                className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg active:bg-indigo-100"
-              >
-                Download PDF
-              </button>
-            </div>
-
-            {logs.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
-                <p className="text-slate-400 text-sm italic">No entries yet</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {logs.map(log => (
-                  <div key={log.id} className="bg-white px-3 py-2.5 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-black text-sm ${log.status === 'normal' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                        {log.value}
-                      </div>
-                      <div>
-                        <p className="font-bold text-xs text-slate-800">{CATEGORIES.find(c => c.id === parseInt(log.categoryId))?.label}</p>
-                        <p className="text-[10px] text-slate-400 font-medium">
-                          {new Date(log.date).toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={log.status} />
-                      <button onClick={() => deleteLog(log.id)} className="p-1.5 text-slate-300 hover:text-red-500">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tab: Stats */}
-        {activeTab === 'stats' && (
-          <div className="space-y-4 animate-in fade-in">
-            <h2 className="text-base font-bold text-slate-800">Insights</h2>
-            {logs.length < 3 ? (
-              <div className="bg-white p-6 rounded-xl border border-slate-200 text-center">
-                <AlertCircle className="mx-auto text-amber-500 mb-2" size={24} />
-                <p className="text-xs text-slate-500 font-medium">Log at least 3 readings for charts.</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: 'AVG', val: (logs.reduce((s, l) => s + l.value, 0) / logs.length).toFixed(1), color: 'text-indigo-600' },
-                    { label: 'RANGE', val: `${Math.round((logs.filter(l => l.status === 'normal').length / logs.length) * 100)}%`, color: 'text-green-600' },
-                    { label: 'TOTAL', val: logs.length, color: 'text-slate-800' }
-                  ].map(stat => (
-                    <div key={stat.label} className="bg-white p-2 rounded-xl shadow-sm border border-slate-100 text-center">
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{stat.label}</p>
-                      <p className={`text-lg font-black ${stat.color}`}>{stat.val}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-wider">Trend (mmol/L)</h3>
-                  <div className="h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={statsData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis 
-                          dataKey="date" 
-                          axisLine={false} 
-                          tickLine={false} 
-                          tick={{fontSize: 9, fill: '#94a3b8'}}
-                          tickFormatter={(val) => new Date(val).toLocaleDateString(undefined, {day: 'numeric', month: 'short'})}
-                        />
-                        <YAxis axisLine={false} tickLine={false} tick={{fontSize: 9, fill: '#94a3b8'}} />
-                        <Tooltip contentStyle={{fontSize: '10px', borderRadius: '8px'}} />
-                        <Line type="monotone" dataKey="avg" stroke="#4f46e5" strokeWidth={3} dot={{r: 3, fill: '#4f46e5'}} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-100">
-                  <h3 className="text-[10px] font-black text-slate-400 uppercase mb-4 tracking-wider">Distribution</h3>
-                  <div className="h-40 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart layout="vertical" data={[
-                        { name: 'Norm', count: logs.filter(l => l.status === 'normal').length, color: '#10b981' },
-                        { name: 'High', count: logs.filter(l => l.status === 'high').length, color: '#ef4444' },
-                        { name: 'Low', count: logs.filter(l => l.status === 'low').length, color: '#f59e0b' },
-                      ]}>
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fontSize: 10}} width={40} />
-                        <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
-                          { [1,2,3].map((e, i) => <Cell key={i} fill={['#10b981', '#ef4444', '#f59e0b'][i]} />) }
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-};
-
-export default App;
+        const rootElement = document.getElementById('root');
+        const root = ReactDOM.createRoot(rootElement);
+        root.render(<App />);
+    </script>
+</body>
+</html>
